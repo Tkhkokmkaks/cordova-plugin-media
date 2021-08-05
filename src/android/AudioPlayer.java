@@ -107,13 +107,19 @@ public class AudioPlayer implements OnCompletionListener, OnPreparedListener, On
     }
 
     private String generateTempFile() {
-      String tempFileName = null;
-      if (Environment.getExternalStorageState().equals(Environment.MEDIA_MOUNTED)) {
-          tempFileName = Environment.getExternalStorageDirectory().getAbsolutePath() + "/tmprecording-" + System.currentTimeMillis() + ".3gp";
-      } else {
-          tempFileName = "/data/data/" + handler.cordova.getActivity().getPackageName() + "/cache/tmprecording-" + System.currentTimeMillis() + ".3gp";
-      }
-      return tempFileName;
+        String tempFileName = null;
+        if (Environment.getExternalStorageState().equals(Environment.MEDIA_MOUNTED)) {
+            //Check android version, if 11 use another directory
+            if(android.os.Build.VERSION.SDK_INT > 29){
+                //Change audio recording format to m4a
+                tempFileName = "/data/user/0/" + handler.cordova.getActivity().getPackageName() + "/files/tmprecording-" + System.currentTimeMillis() + ".m4a";
+            } else {
+                tempFileName = Environment.getExternalStorageDirectory().getAbsolutePath() + "/tmprecording-" + System.currentTimeMillis() + ".3gp";
+            }
+        } else {
+            tempFileName = "/data/data/" + handler.cordova.getActivity().getPackageName() + "/cache/tmprecording-" + System.currentTimeMillis() + ".3gp";
+    }
+        return tempFileName;
     }
 
     /**
@@ -153,9 +159,21 @@ public class AudioPlayer implements OnCompletionListener, OnPreparedListener, On
             this.audioFile = file;
             this.recorder = new MediaRecorder();
             this.recorder.setAudioSource(MediaRecorder.AudioSource.MIC);
-            this.recorder.setOutputFormat(MediaRecorder.OutputFormat.AAC_ADTS); // RAW_AMR);
-            this.recorder.setAudioEncoder(MediaRecorder.AudioEncoder.AAC); //AMR_NB);
-            this.tempFile = generateTempFile();
+
+            if(android.os.Build.VERSION.SDK_INT > 29){
+            //Changed audio recording format from aac to m4a
+                this.recorder.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4);
+                this.recorder.setAudioEncoder(MediaRecorder.OutputFormat.AMR_NB);
+                this.recorder.setAudioEncodingBitRate(16*44100);
+                this.recorder.setAudioSamplingRate(44100);
+                //Ignore generateTempFile() and directly save the audio file to another workable directory
+                this.tempFile = file;
+            } else {
+                this.recorder.setOutputFormat(MediaRecorder.OutputFormat.AAC_ADTS); // RAW_AMR);
+                this.recorder.setAudioEncoder(MediaRecorder.AudioEncoder.AAC); //AMR_NB);
+                this.tempFile = generateTempFile();
+            }
+
             this.recorder.setOutputFile(this.tempFile);
             try {
                 this.recorder.prepare();
@@ -186,7 +204,12 @@ public class AudioPlayer implements OnCompletionListener, OnPreparedListener, On
 
         if (!file.startsWith("/")) {
             if (Environment.getExternalStorageState().equals(Environment.MEDIA_MOUNTED)) {
-                file = Environment.getExternalStorageDirectory().getAbsolutePath() + File.separator + file;
+                //Check android version
+                if(android.os.Build.VERSION.SDK_INT > 29){
+                    file = "/data/user/0/" + handler.cordova.getActivity().getPackageName() + "/files/" + file;
+                } else {
+                    file = Environment.getExternalStorageDirectory().getAbsolutePath() + File.separator + file;
+                }
             } else {
                 file = "/data/data/" + handler.cordova.getActivity().getPackageName() + "/cache/" + file;
             }
@@ -217,7 +240,7 @@ public class AudioPlayer implements OnCompletionListener, OnPreparedListener, On
                         copy(inputStream, outputStream, false);
                     } catch (Exception e) {
                         LOG.e(LOG_TAG, e.getLocalizedMessage(), e);
-                   } finally {
+                    } finally {
                         if (inputStream != null) try {
                             inputStream.close();
                             inputFile.delete();
@@ -308,7 +331,10 @@ public class AudioPlayer implements OnCompletionListener, OnPreparedListener, On
                 if (stop) {
                     LOG.d(LOG_TAG, "stopping recording");
                     this.setState(STATE.MEDIA_STOPPED);
-                    this.moveFile(this.audioFile);
+                    //Move file if android version is before android 11
+                    if(android.os.Build.VERSION.SDK_INT <= 29){
+                        this.moveFile(this.audioFile);
+                    }
                 } else {
                     LOG.d(LOG_TAG, "pause recording");
                     this.setState(STATE.MEDIA_PAUSED);
